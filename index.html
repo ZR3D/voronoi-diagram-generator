@@ -46,6 +46,8 @@ const svgns = 'http://www.w3.org/2000/svg';
 const circleLayer = document.getElementById('circleLayer');
 const pathLayer = document.getElementById('pathLayer');
 const fill = ['#123456','#561234','#125634','#C6832E','#3CC731', '#64748b', '#6b7280', '#71717a', '#737373', '#78716c', '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ef4444', '#ec4899', '#f43f5e',];
+const saveSvgButton = document.getElementById('saveSvgButton');
+saveSvgButton.addEventListener('click', saveSvg);
 
 // --- Helper Functions ---
 function getFill(index){
@@ -58,6 +60,18 @@ function generateHexString(length) {
     result += Math.random().toString(16).substring(2);
   }
   return result.substring(0, length);
+}
+
+// --- SVG Functions ---
+function saveSvg(){
+  let data = (new XMLSerializer()).serializeToString(designSvg)
+  let svgBlob = new Blob([data], {type: 'image/svg+xml;charset=utf-8'})
+  let url = URL.createObjectURL(svgBlob)
+  const a = document.createElement('a');
+  a.setAttribute('download', 'voronoi_diagram.svg');
+  a.setAttribute('href', url);
+  a.setAttribute('target', '_blank');
+  a.click();
 }
 
 function createCircle(circleData, fill, stroke, strokeWidth=1, layer=circleLayer){
