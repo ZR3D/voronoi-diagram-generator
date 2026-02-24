@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voronoi Diagram Generator</title>
+  <style>
+    *{box-sizing:border-box;}
+    body { font-family: sans-serif; font-size: 13px; padding: 0; margin: 0; background-color: #627385;}
+    select, input{border-radius: 4px; border:none; padding:0.33rem; background:#fff; margin-right:0.5rem; font-size: 12px;}
+    input{font-size: 12px;}
+    input[type=number]{width:3rem;}
+    button {background:#356c9b; border:none; color:#fff; padding:0.39rem; cursor:pointer; font-size: 12px; border-radius: 4px;}
+    button:hover{background:#57738F;}
+    input[type="range"] {accent-color:#356c9b;  margin-top:5px;}
+    .main{width:100%; display: flex;}
+    .controls{display: flex; width: 100%;background-color: #2e3d4d;z-index: 10;color: #f1f1f1;padding: 8px 12px;align-items: center;gap: 10px;flex-wrap: wrap;}
+  </style>
+</head>
+<body>
+  <div class="controls">
+   <label>Site Number </label>
+   <input id="siteNumberInput" type="number" value="50" min="2" oninput="renderView()">
+   <button id="saveSvgButton">Save SVG</button>
+  </div>
+
+  <div id="main" class="main">
+    <div class="svg-container">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" id="designSvg" width="1200" height="600" >
+      <defs>
+        <style id="svg-def-style" type="text/css">
+          .svg-text {font-family: sans-serif; font-size: 13px;}
+          .svg-circle {fill-opacity:1; stroke:none; stroke-width:0;}
+        </style>
+      </defs>
+      <g id="backgroundLayer"><rect id="background" width="100%" height="100%" fill="#5091B7" /></g>
+      <g id="pathLayer"></g>
+      <g id="circleLayer"></g>
+    </svg>
+    </div>
+  </div>
+</body>
+<script>
+// --- Global Declarations ---
+const svgns = 'http://www.w3.org/2000/svg';
+const circleLayer = document.getElementById('circleLayer');
+const pathLayer = document.getElementById('pathLayer');
+const fill = ['#123456','#561234','#125634','#C6832E','#3CC731', '#64748b', '#6b7280', '#71717a', '#737373', '#78716c', '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ef4444', '#ec4899', '#f43f5e',];
+
+// --- Helper Functions ---
+function getFill(index){
+  return fill[index % fill.length];
+}
+
+function generateHexString(length) {
+  let result = "";
+  while (result.length < length) {
+    result += Math.random().toString(16).substring(2);
+  }
+  return result.substring(0, length);
+}
+
+function createCircle(circleData, fill, stroke, strokeWidth=1, layer=circleLayer){
+  const radius = (circleData.r)? circleData.r:3;
+  const circle = document.createElementNS(svgns, 'circle');
+  circle.setAttributeNS(null, 'cx', circleData.x);
+  circle.setAttributeNS(null, 'cy', circleData.y);
+  circle.setAttributeNS(null, 'r', radius);
+  circle.setAttributeNS(null, 'class', 'svg-circle');
+  if(fill) circle.setAttributeNS(null, 'fill', fill);
+  //if(stroke) circle.setAttributeNS(null, 'stroke', stroke);
+  //if(strokeWidth) circle.setAttributeNS(null, 'stroke-width', strokeWidth);  
+  layer.appendChild(circle);
+}
+
+function createPath(pathInfo, fill, stroke, strokeWidth, id, layer, closePath){
+  let d;
+  if(typeof pathInfo === "string"){
+      d = pathInfo; //is a string
+  }else{
+      if(pathInfo.length!=0){
+        d = createPathString(pathInfo, closePath); //is a point array
+      }else{
+        return false;
+      }
+  }
+  let path = document.createElementNS(svgns, 'path');
+  path.setAttributeNS(null, 'id', id);
+  path.setAttributeNS(null, 'd', d);
+  path.setAttributeNS(null, 'style', 'fill:' + fill + '; stroke:' + stroke + '; stroke-width:' + strokeWidth + ';');
+  layer.appendChild(path);
+}
+
+function createPathString(posList, closePath){
+  let d = "M" + + posList[0].x + " " + posList[0].y;
+  for(let i=1; i<posList.length; i++) {
+      d += " L" + posList[i].x + " " + posList[i].y;
+  }
+  if(closePath) d += " z";
+  return d;
+}
+
+function curvePolygon(points, distance = 6){
+  //const percentInverse = 1 - percent;
+  let svgString = '';
+  const pointsNew = [];
+
+  // Remove by distance (doubles)
+  for(let i=0; i<points.length; i++){
+    const iNext = (i+1) % points.length;
+    if(calculateDistance(points[i],points[iNext],true)>2){
+      pointsNew.push(points[i])
+    }else{
+      console.log(i, points[i],points[iNext])
+    } 
+  }
+
+  for(let i=0; i<pointsNew.length; i++){
+    const iNext = (i+1) % pointsNew.length;
+    const iNextNext = (i+2) % pointsNew.length;
+    // Line and curve
+    const corner = pointsNew[iNext];
+    const lineStart = findPointOnLineByDistance(pointsNew[i], corner, distance, false)
+    const lineEnd = findPointOnLineByDistance(pointsNew[i], corner, distance, true)
+    const curveEnd = findPointOnLineByDistance(corner, pointsNew[iNextNext], distance, false)
+    
+    const letter = (i===0)? 'M':'L'
+    if(i===0) svgString += `M${lineStart.x} ${lineStart.y}`;
+    svgString += ` L${lineEnd.x} ${lineEnd.y} Q${corner.x} ${corner.y} ${curveEnd.x} ${curveEnd.y}` 
+  }
+  return svgString;
+}
+
+function rotatePoint(centerOfRotation, pointToRotate, degrees){
+  let length = calculateDistance(centerOfRotation, pointToRotate, true) + 300; //find line distance
+  let angle = lineAngle(centerOfRotation, pointToRotate, true); //find current angle
+  let xRot = centerOfRotation.x + (Math.cos(Math.PI/180 * (degrees+angle))*length);
+  let yRot = centerOfRotation.y + (Math.sin(Math.PI/180 * (degrees+angle))*length);
+  return {x:niceNum(xRot),y:niceNum(yRot)};
+}
+
+function findPointOnLineByDistance(pos1, pos2, distance, inverse = false){
+  const lineLength = calculateDistance(pos1, pos2, true);
+  let percent = distance/lineLength;
+  if(inverse) percent = 1 - percent;
+  return findPointOnLine(pos1, pos2, percent);
+}
+
+function findPointOnLine(pos1,pos2,percent){
+  let xPos = pos1.x+((pos2.x-pos1.x)*percent);
+  let yPos = pos1.y-((pos1.y-pos2.y)*percent);
+  return {x:xPos,y:yPos};
+}
+
+function niceNum(num, decimalPlaces=5){
+  num = (Number.isInteger(num))? Number(num):Number(num.toFixed(decimalPlaces));
+  return parseFloat(num); //removes trailing zeros
+}
+
+function calculateDistance(pos1,pos2,positiveOnly){
+  let a = Number(pos1.x) - Number(pos2.x);
+  let b = Number(pos1.y) - Number(pos2.y);
+  let ans = Math.sqrt(a*a + b*b)
+  if(positiveOnly){ans = Math.abs(ans)}
+  if(isNaN(ans)){ans=10000;}
+  return ans;
+}
+
+function inside(point, vs) {
+  const x = point.x;
+  const y = point.y;
+  let isInside = false;
+
+  // Loop through each edge of the polygon
+  // i is the current vertex, j is the previous vertex
+  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+    const xi = vs[i].x, yi = vs[i].y;
+    const xj = vs[j].x, yj = vs[j].y;
+    
+    // Check if the ray from the point intersects the edge between i and j
+    const intersect = ((yi > y) !== (yj > y))
+      && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        
+    if (intersect) {
+      isInside = !isInside;
+    }
+  }    
+  return isInside;
+}
+
+function lineAngle(pos1, pos2, positiveOnly){
+  const deltaX = pos2.x - pos1.x ;
+  const deltaY = pos2.y - pos1.y;
+  const rad = Math.atan2(deltaY, deltaX); // In radians
+  let deg = rad * (180 / Math.PI); // In degrees
+  if(positiveOnly && deg<0) deg += 360;
+  return Number(deg.toFixed(5));
+}
+
+// Improved line intersect - includes is the intersection along the segments
+function lineIntersect(pos1, pos2, pos3, pos4, alongSegment){
+  // Check if none of the lines are of length 0
+  if ((pos1.x === pos2.x && pos1.y === pos2.y) || (pos3.x === pos4.x && pos3.y === pos4.y)) {
+    return false;
+  }
+  let denominator = ((pos4.y - pos3.y) * (pos2.x - pos1.x) - (pos4.x - pos3.x) * (pos2.y - pos1.y));
+  // Lines are parallel
+  if (denominator === 0) {
+    return false;
+  }
+  let ua = ((pos4.x - pos3.x) * (pos1.y - pos3.y) - (pos4.y - pos3.y) * (pos1.x - pos3.x)) / denominator;
+  let ub = ((pos2.x - pos1.x) * (pos1.y - pos3.y) - (pos2.y - pos1.y) * (pos1.x - pos3.x)) / denominator;
+
+  // Is the intersection along the segments
+  if(alongSegment==true){
+    if (ua < 0 || ua > 1 || ub < 0 || ub > 1) {
+      return false;
+    }
+  }
+  // Return a object with the x and y coordinates of the intersection
+  let x = pos1.x + ua * (pos2.x - pos1.x);
+  let y = pos1.y + ua * (pos2.y - pos1.y);
+  return {x, y};
+}
+
+function createBisectorLine(p1, p2, index, corners, width, height, border = 0, drawLine = false){
+  //Find midpoints
+  let midpoint = findPointOnLine(p1, p2, 0.5);
+  if(border !== 0){
+    midpoint = findPointOnLineByDistance(midpoint, p1, border)
+  }
+  
+  const a = rotatePoint(midpoint, p1, 90);
+  const b = rotatePoint(midpoint, p2, 90);
+  const extended = [];
+  
+  // Extend to edge of rectangle;
+  for(let i=0; i<corners.length; i++){
+    const iNext = (i+1) % corners.length;
+    const intersectPoint = lineIntersect(corners[i], corners[iNext], a, b, false);
+    if((intersectPoint.x >= 0 && intersectPoint.x <= width )&& (intersectPoint.y >= 0 && intersectPoint.y <= height)){
+      extended.push(intersectPoint);
+    }
+  }
+
+  if(drawLine){
+    createCircle(midpoint, null, null, null, circleLayer);
+    createPath(extended, null, getFill(index), 1, 'x', pathLayer, false);
+  }
+  
+  return {a:extended[0], b:extended[1]}
+}
+
+function randomIntFromInterval(min, max) { // min and max included 
+  return Math.floor(Math.random() * (max - min + 1) + min)
+}
+
+function randomPoint(width, height){
+  return { 
+    x:randomIntFromInterval(5, width-5),
+    y:randomIntFromInterval(5, height-5),
+    r:5,
+  }
+}
+
+function renderView(){
+  circleLayer.innerHTML = '';
+  pathLayer.innerHTML = '';
+  const width = 1200;
+  const height = 600;
+  const siteNumber = Number(siteNumberInput.value);
+
+  //Start with our rectangle boundry corners
+  const corners = [
+    {x:0, y:0, type:'corner'}, // tl
+    {x:width, y:0, type:'corner'}, // tr
+    {x:width, y:height, type:'corner'}, // br
+    {x:0, y:height, type:'corner'}, // bl
+  ];
+  
+  console.log(curvePolygon(corners, 3))
+  
+  // Seed points
+  const sitePoints = [];
+  
+  // Add Random if at least 10 units apart
+  for(let i=0; i<siteNumber; i++){
+    let distance = width;
+    const randPoint = randomPoint(width, height);
+    // Check if the distance from all points is enough;
+    sitePoints.forEach(site =>{
+      const distanceCheck = calculateDistance(site,randPoint,true)
+      if(distance>distanceCheck) distance = distanceCheck;
+    });
+    if(distance>10){
+      sitePoints.push(randPoint);
+    }    
+  }
+   
+  // Make circles
+  sitePoints.forEach((site, index) =>{
+    createCircle(site, getFill(index+1), null, null, circleLayer);
+  });
+   
+  const sitePointsLen = sitePoints.length;
+
+  for (let x=0; x<sitePointsLen; x++){ 
+    const siteIndex =  x ;
+    const currentSite = sitePoints[siteIndex];
+
+    // Assign angle and distance from selected site (id);
+    sitePoints.forEach((site, index) =>{
+      site.distance = calculateDistance(currentSite, site, true);
+    });
+
+    // Clone and remove the current site at site index
+    const sitePointsClone =  [...sitePoints];
+    sitePointsClone.splice(siteIndex, 1)
+    sitePointsClone.sort((a, b) => {
+      return parseFloat(a.distance) - parseFloat(b.distance); //by number
+    });
+
+    // Reduce the poly!
+    let reducedPoly1 = corners;
+    for(let i=0; i<sitePointsClone.length; i++){
+      bisectorLine = createBisectorLine(currentSite, sitePointsClone[i], i, corners, width, height, 3, false);
+      reducedPoly1 = reducePolygon(reducedPoly1, bisectorLine, currentSite, width, height, true);
+    }
+    
+    const curvedPolygon = curvePolygon(reducedPoly1, 3);
+    createPath(curvedPolygon, getFill(x) + '50', '#125634', 1, 'x', pathLayer, true);
+        
+    //const colour = '#000000' +  generateHexString(2);
+    //createPath(reducedPoly1, colour, colour, 1, 'x', pathLayer, true);
+  } 
+}
+
+function reducePolygon(polygon, bisectorLine, currentSite, width, height, segmentOnly = true){
+  const newPolygon = [];
+  intersectCount = 0;
+  
+  for(let i=0; i<polygon.length; i++){
+    intersectCount = 0;
+    polygon[i].type = 'corner'; // Reset type to corner
+    newPolygon.push(polygon[i]); 
+    const iNext = (i+1) % polygon.length;
+    // Check if the bisector line intersects a polygon edge
+    const intersectPoint = lineIntersect(polygon[i], polygon[iNext], bisectorLine.a, bisectorLine.b, segmentOnly);
+    if(intersectPoint){
+    //if((intersectPoint.x >= 0 && intersectPoint.x <= width )&& (intersectPoint.y >= 0 && intersectPoint.y <= height)){
+      intersectPoint.type = 'intersect';
+      newPolygon.push(intersectPoint);
+    }
+  }
+
+  const polyTest1 = [];
+  const polyTest2 = [];  
+  
+  
+  for(let i=0; i<newPolygon.length; i++){
+    const point = newPolygon[i];
+    if(point.type === 'intersect') intersectCount++;    
+    // cnr -> int -> int -> cnr
+    if(point.type === 'intersect' || intersectCount!==1){
+      polyTest1.push(point);
+    }
+    // int -> cnr-> cnr-> int 
+    if(point.type === 'intersect' || intersectCount===1){
+      polyTest2.push(point);
+    }
+  }  
+
+  if(inside(currentSite, polyTest1)){    
+    return polyTest1;
+  } else if(inside(currentSite, polyTest2)){
+    return polyTest2;
+  }else{
+    return polygon; //return original
+  }
+}
+
+function init(){
+  renderView();
+}
+
+init();
+
+</script>
+</html>
