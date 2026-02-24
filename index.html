@@ -15,12 +15,21 @@
     input[type="range"] {accent-color:#356c9b;  margin-top:5px;}
     .main{width:100%; display: flex;}
     .controls{display: flex; width: 100%;background-color: #2e3d4d;z-index: 10;color: #f1f1f1;padding: 8px 12px;align-items: center;gap: 10px;flex-wrap: wrap;}
+    .hidden{display:none;}
   </style>
 </head>
 <body>
   <div class="controls">
    <label>Site Number </label>
    <input id="siteNumberInput" type="number" value="50" min="2" oninput="renderView()">
+   <label>Show Sites </label>
+   <input id="showSitesCheckbox" type="checkbox" checked="true" >
+   <label>Cell Border</label>
+   <input id="cellBorderNumber" type="number" value="3" min="0" step="0.5" oninput="renderView()">
+   <label>Rounded Corner</label>
+   <input id="roundedCornerNumber" type="number" value="3" min="0" step="0.5" oninput="renderView()">
+   
+   
    <button id="saveSvgButton">Save SVG</button>
   </div>
 
@@ -47,9 +56,23 @@ const circleLayer = document.getElementById('circleLayer');
 const pathLayer = document.getElementById('pathLayer');
 const fill = ['#123456','#561234','#125634','#C6832E','#3CC731', '#64748b', '#6b7280', '#71717a', '#737373', '#78716c', '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ef4444', '#ec4899', '#f43f5e',];
 const saveSvgButton = document.getElementById('saveSvgButton');
+const showSitesCheckbox = document.getElementById('showSitesCheckbox');
+showSitesCheckbox.addEventListener('change', showSitesChange);
 saveSvgButton.addEventListener('click', saveSvg);
+const cellBorderNumber = document.getElementById('cellBorderNumber');
+const roundedCornerNumber = document.getElementById('roundedCornerNumber');
+
 
 // --- Helper Functions ---
+function showSitesChange(){
+  if(showSitesCheckbox.checked === true){
+    circleLayer.classList.remove('hidden');
+  }else{
+    circleLayer.classList.add('hidden');
+  }
+  
+}
+
 function getFill(index){
   return fill[index % fill.length];
 }
@@ -283,6 +306,9 @@ function renderView(){
   const width = 1200;
   const height = 600;
   const siteNumber = Number(siteNumberInput.value);
+  const cellBorder = Number(cellBorderNumber.value);
+  const roundedCorner = Number(roundedCornerNumber.value);
+  
 
   //Start with our rectangle boundry corners
   const corners = [
@@ -291,10 +317,7 @@ function renderView(){
     {x:width, y:height, type:'corner'}, // br
     {x:0, y:height, type:'corner'}, // bl
   ];
-  
-  console.log(curvePolygon(corners, 3))
-  
-  // Seed points
+
   const sitePoints = [];
   
   // Add Random if at least 10 units apart
@@ -337,11 +360,11 @@ function renderView(){
     // Reduce the poly!
     let reducedPoly1 = corners;
     for(let i=0; i<sitePointsClone.length; i++){
-      bisectorLine = createBisectorLine(currentSite, sitePointsClone[i], i, corners, width, height, 3, false);
+      bisectorLine = createBisectorLine(currentSite, sitePointsClone[i], i, corners, width, height, cellBorder, false);
       reducedPoly1 = reducePolygon(reducedPoly1, bisectorLine, currentSite, width, height, true);
     }
     
-    const curvedPolygon = curvePolygon(reducedPoly1, 3);
+    const curvedPolygon = curvePolygon(reducedPoly1, roundedCorner);
     createPath(curvedPolygon, getFill(x) + '50', '#125634', 1, 'x', pathLayer, true);
         
     //const colour = '#000000' +  generateHexString(2);
