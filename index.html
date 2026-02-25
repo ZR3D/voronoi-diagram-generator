@@ -21,15 +21,16 @@
 <body>
   <div class="controls">
    <label>Site Number </label>
-   <input id="siteNumberInput" type="number" value="50" min="2" oninput="renderView()">
+   <input id="siteNumberInput" type="number" value="50" min="2" oninput="renderView(true)">
+   <label>Site Size</label>
+   <input id="siteSizeNumber" type="number" value="3" min="0" step="0.5" oninput="renderView(false)">
    <label>Show Sites </label>
    <input id="showSitesCheckbox" type="checkbox" checked="true" >
    <label>Cell Border</label>
-   <input id="cellBorderNumber" type="number" value="3" min="0" step="0.5" oninput="renderView()">
-   <label>Rounded Corner</label>
-   <input id="roundedCornerNumber" type="number" value="3" min="0" step="0.5" oninput="renderView()">
-   
-   
+   <input id="cellBorderNumber" type="number" value="3" min="0" step="0.5" oninput="renderView(false)">
+   <label>Cell Rounded</label>
+   <input id="roundedCornerNumber" type="number" value="4" min="0" step="0.5" oninput="renderView(false)">
+   <button onclick="relaxPoints()">Relax Sites</button>   
    <button id="saveSvgButton">Save SVG</button>
   </div>
 
@@ -57,11 +58,16 @@ const pathLayer = document.getElementById('pathLayer');
 const fill = ['#123456','#561234','#125634','#C6832E','#3CC731', '#64748b', '#6b7280', '#71717a', '#737373', '#78716c', '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ef4444', '#ec4899', '#f43f5e',];
 const saveSvgButton = document.getElementById('saveSvgButton');
 const showSitesCheckbox = document.getElementById('showSitesCheckbox');
-showSitesCheckbox.addEventListener('change', showSitesChange);
-saveSvgButton.addEventListener('click', saveSvg);
 const cellBorderNumber = document.getElementById('cellBorderNumber');
 const roundedCornerNumber = document.getElementById('roundedCornerNumber');
+const siteSizeNumber = document.getElementById('siteSizeNumber');
 
+let sitePoints = [];
+let voronoiPolygons = [];
+
+// --- Event Listeners ---
+showSitesCheckbox.addEventListener('change', showSitesChange);
+saveSvgButton.addEventListener('click', saveSvg);
 
 // --- Helper Functions ---
 function showSitesChange(){
@@ -69,8 +75,7 @@ function showSitesChange(){
     circleLayer.classList.remove('hidden');
   }else{
     circleLayer.classList.add('hidden');
-  }
-  
+  }  
 }
 
 function getFill(index){
@@ -98,7 +103,8 @@ function saveSvg(){
 }
 
 function createCircle(circleData, fill, stroke, strokeWidth=1, layer=circleLayer){
-  const radius = (circleData.r)? circleData.r:3;
+  const radius = siteSizeNumber.value;
+  //const radius = (circleData.r)? circleData.r:3;
   const circle = document.createElementNS(svgns, 'circle');
   circle.setAttributeNS(null, 'cx', circleData.x);
   circle.setAttributeNS(null, 'cy', circleData.y);
@@ -138,6 +144,26 @@ function createPathString(posList, closePath){
   }
   if(closePath) d += " z";
   return d;
+}
+
+function getPolygonCentroid(ptsOriginal) {
+    pts = Object.create(ptsOriginal);
+    let first = pts[0]
+    let last = pts[pts.length-1];
+    if (first.x != last.x || first.y != last.y) pts.push(first);
+    let twicearea=0,
+    x=0, y=0,
+    nPts = pts.length,
+    p1, p2, f;
+    for(let i=0, j=nPts-1; i<nPts; j=i++){
+        p1 = pts[i]; p2 = pts[j];
+        f = p1.x*p2.y - p2.x*p1.y;
+        twicearea += f;
+        x += ( p1.x + p2.x ) * f;
+        y += ( p1.y + p2.y ) * f;
+    }
+    f = twicearea * 3;
+    return { x:x/f, y:y/f };
 }
 
 function curvePolygon(points, lengthToCurve = 6){
@@ -311,9 +337,23 @@ function randomPoint(width, height){
   }
 }
 
-function renderView(){
+function relaxPoints(){
+  const sitePointsNew = [];
+  
+  voronoiPolygons.forEach(polygon => {
+    sitePointsNew.push(getPolygonCentroid(polygon));    
+  });
+  
+  sitePoints = sitePointsNew;
+  renderView(false)
+}
+
+
+
+function renderView(recalculatePoints){
   circleLayer.innerHTML = '';
   pathLayer.innerHTML = '';
+  voronoiPolygons = [];
   const width = 1200;
   const height = 600;
   const siteNumber = Number(siteNumberInput.value);
@@ -329,8 +369,9 @@ function renderView(){
     {x:0, y:height, type:'corner'}, // bl
   ];
 
-  const sitePoints = [];
   
+  if(recalculatePoints){
+  sitePoints = [];  
   // Add Random if at least 10 units apart
   for(let i=0; i<siteNumber; i++){
     let distance = width;
@@ -340,10 +381,10 @@ function renderView(){
       const distanceCheck = calculateDistance(site,randPoint,true)
       if(distance>distanceCheck) distance = distanceCheck;
     });
-
     if(distance>10){
       sitePoints.push(randPoint);
     }    
+  }
   }
    
   // Make circles
@@ -375,6 +416,8 @@ function renderView(){
       bisectorLine = createBisectorLine(currentSite, sitePointsClone[i], i, corners, width, height, cellBorder, false);
       reducedPoly1 = reducePolygon(reducedPoly1, bisectorLine, currentSite, width, height, true);
     }
+    // Add to polygon list
+    voronoiPolygons.push(reducedPoly1);
     
     const curvedPolygon = curvePolygon(reducedPoly1, roundedCorner);
     createPath(curvedPolygon, getFill(x), 0.5, '#125634', 1, 'x', pathLayer, true);
@@ -429,7 +472,7 @@ function reducePolygon(polygon, bisectorLine, currentSite, width, height, segmen
 }
 
 function init(){
-  renderView();
+  renderView(true);
 }
 
 init();
