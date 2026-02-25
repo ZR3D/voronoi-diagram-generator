@@ -4,4 +4,4 @@ This voronoi generator randomly generates sites based on the site number input a
 
 The below diagram drawn in Inkscape shows the method used for creating each voronoi cell.
 
-![Alt text](images/voronoi_how_to.png)
+![Voronoi Diagram How to Image](images/voronoi_how_to.png)
