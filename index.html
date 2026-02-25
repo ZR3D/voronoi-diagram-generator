@@ -140,7 +140,12 @@ function createPathString(posList, closePath){
   return d;
 }
 
-function curvePolygon(points, distance = 6){
+function curvePolygon(points, lengthToCurve = 6){
+ 
+  let threshold = lengthToCurve * 2;
+  if(threshold === 0) threshold = 2;
+  if(threshold > 10) threshold = 10;
+  
   //const percentInverse = 1 - percent;
   let svgString = '';
   const pointsNew = [];
@@ -152,7 +157,7 @@ function curvePolygon(points, distance = 6){
       const testDifference = calculateDistance(pointsNew[i],points[j],true)
       if(testDifference<distance) distance = testDifference;
     }
-    if(distance>6){
+    if(distance>threshold){
       pointsNew.push(points[j])
     }
   }
@@ -163,9 +168,9 @@ function curvePolygon(points, distance = 6){
     const iNextNext = (i+2) % pointsNew.length;
     // Line and curve
     const corner = pointsNew[iNext];
-    const lineStart = findPointOnLineByDistance(pointsNew[i], corner, distance, false)
-    const lineEnd = findPointOnLineByDistance(pointsNew[i], corner, distance, true)
-    const curveEnd = findPointOnLineByDistance(corner, pointsNew[iNextNext], distance, false)
+    const lineStart = findPointOnLineByDistance(pointsNew[i], corner, lengthToCurve, false)
+    const lineEnd = findPointOnLineByDistance(pointsNew[i], corner, lengthToCurve, true)
+    const curveEnd = findPointOnLineByDistance(corner, pointsNew[iNextNext], lengthToCurve, false)
     
     const letter = (i===0)? 'M':'L'
     if(i===0) svgString += `M${lineStart.x} ${lineStart.y}`;
@@ -335,6 +340,7 @@ function renderView(){
       const distanceCheck = calculateDistance(site,randPoint,true)
       if(distance>distanceCheck) distance = distanceCheck;
     });
+
     if(distance>10){
       sitePoints.push(randPoint);
     }    
