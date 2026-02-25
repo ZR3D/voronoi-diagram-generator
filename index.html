@@ -110,7 +110,7 @@ function createCircle(circleData, fill, stroke, strokeWidth=1, layer=circleLayer
   layer.appendChild(circle);
 }
 
-function createPath(pathInfo, fill, stroke, strokeWidth, id, layer, closePath){
+function createPath(pathInfo, fill, fillOpacity, stroke, strokeWidth, id, layer, closePath){
   let d;
   if(typeof pathInfo === "string"){
       d = pathInfo; //is a string
@@ -124,7 +124,10 @@ function createPath(pathInfo, fill, stroke, strokeWidth, id, layer, closePath){
   let path = document.createElementNS(svgns, 'path');
   path.setAttributeNS(null, 'id', id);
   path.setAttributeNS(null, 'd', d);
-  path.setAttributeNS(null, 'style', 'fill:' + fill + '; stroke:' + stroke + '; stroke-width:' + strokeWidth + ';');
+  if(fill) path.setAttributeNS(null, 'fill', fill);
+  if(fillOpacity) path.setAttributeNS(null, 'fill-opacity', fillOpacity);
+  if(stroke) path.setAttributeNS(null, 'stroke', stroke);
+  if(strokeWidth) path.setAttributeNS(null, 'stroke-width', strokeWidth);
   layer.appendChild(path);
 }
 
@@ -143,14 +146,17 @@ function curvePolygon(points, distance = 6){
   const pointsNew = [];
 
   // Remove by distance (doubles)
-  for(let i=0; i<points.length; i++){
-    const iNext = (i+1) % points.length;
-    if(calculateDistance(points[i],points[iNext],true)>2){
-      pointsNew.push(points[i])
-    }else{
-      console.log(i, points[i],points[iNext])
-    } 
+  for(let j=0; j<points.length; j++){
+    let distance = 100;
+    for(let i=0; i<pointsNew.length; i++){
+      const testDifference = calculateDistance(pointsNew[i],points[j],true)
+      if(testDifference<distance) distance = testDifference;
+    }
+    if(distance>6){
+      pointsNew.push(points[j])
+    }
   }
+
 
   for(let i=0; i<pointsNew.length; i++){
     const iNext = (i+1) % pointsNew.length;
@@ -282,7 +288,7 @@ function createBisectorLine(p1, p2, index, corners, width, height, border = 0, d
 
   if(drawLine){
     createCircle(midpoint, null, null, null, circleLayer);
-    createPath(extended, null, getFill(index), 1, 'x', pathLayer, false);
+    createPath(extended, null, null, getFill(index), 1, 'x', pathLayer, false);
   }
   
   return {a:extended[0], b:extended[1]}
@@ -365,7 +371,7 @@ function renderView(){
     }
     
     const curvedPolygon = curvePolygon(reducedPoly1, roundedCorner);
-    createPath(curvedPolygon, getFill(x) + '50', '#125634', 1, 'x', pathLayer, true);
+    createPath(curvedPolygon, getFill(x), 0.5, '#125634', 1, 'x', pathLayer, true);
         
     //const colour = '#000000' +  generateHexString(2);
     //createPath(reducedPoly1, colour, colour, 1, 'x', pathLayer, true);
