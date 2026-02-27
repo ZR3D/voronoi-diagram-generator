@@ -9,7 +9,7 @@
     body { font-family: sans-serif; font-size: 13px; padding: 0; margin: 0; background-color: #627385;}
     select, input{border-radius: 4px; border:none; padding:0.33rem; background:#fff; margin-right:0.5rem; font-size: 12px;}
     input{font-size: 12px;}
-    input[type=number]{width:3rem;}
+    input[type=number]{width:3.3rem;}
     button {background:#356c9b; border:none; color:#fff; padding:0.39rem; cursor:pointer; font-size: 12px; border-radius: 4px;}
     button:hover{background:#57738F;}
     input[type="range"] {accent-color:#356c9b;  margin-top:5px;}
@@ -21,16 +21,25 @@
 <body>
   <div class="controls">
    <label>Site Number </label>
-   <input id="siteNumberInput" type="number" value="50" min="2" oninput="renderView(true)">
+   <input id="siteNumberInput" type="number" value="50" min="2">
    <label>Site Size</label>
-   <input id="siteSizeNumber" type="number" value="3" min="0" step="0.5" oninput="renderView(false)">
+   <input id="siteSizeNumber" type="number" value="3" min="0" step="0.5" oninput="updateAppData(false)">
    <label>Show Sites </label>
    <input id="showSitesCheckbox" type="checkbox" checked="true" >
+   <button onclick="relaxPoints()">Relax Sites</button>
+   <button onclick="renderView(true)">Generate Sites</button>
    <label>Cell Border</label>
-   <input id="cellBorderNumber" type="number" value="3" min="0" step="0.5" oninput="renderView(false)">
+   <input id="cellBorderNumber" type="number" value="3" min="0" step="0.5" oninput="updateAppData(false)">
    <label>Cell Rounded</label>
-   <input id="roundedCornerNumber" type="number" value="4" min="0" step="0.5" oninput="renderView(false)">
-   <button onclick="relaxPoints()">Relax Sites</button>   
+   <input id="cellRoundedNumber" type="number" value="4" min="0" step="0.5" oninput="updateAppData(false)">   
+   <label>Cell Outline</label>
+   <input id="cellOutlineCheckbox" type="checkbox" checked="true" onchange="updateAppData(false)">
+   <label>Background</label>
+   <input id="backgroundColor" type="color" value="#333333" oninput="changeBackground(this.value)">
+   <label>Width </label>
+   <input id="svgWidthNumber" type="number" value="1200" min="300" step="50" onchange="updateAppData(false)">
+   <label>Height</label>
+   <input id="svgHeightNumber" type="number" value="600" min="300" step="50" onchange="updateAppData(false)">
    <button id="saveSvgButton">Save SVG</button>
   </div>
 
@@ -41,9 +50,10 @@
         <style id="svg-def-style" type="text/css">
           .svg-text {font-family: sans-serif; font-size: 13px;}
           .svg-circle {fill-opacity:1; stroke:none; stroke-width:0;}
+          .hidden{display:none;}
         </style>
       </defs>
-      <g id="backgroundLayer"><rect id="background" width="100%" height="100%" fill="#5091B7" /></g>
+      <g id="backgroundLayer"><rect id="backgroundRect" width="1200" height="600" fill="#333333" /></g>
       <g id="pathLayer"></g>
       <g id="circleLayer"></g>
     </svg>
@@ -53,29 +63,103 @@
 <script>
 // --- Global Declarations ---
 const svgns = 'http://www.w3.org/2000/svg';
+const designSvg = document.getElementById('designSvg');
 const circleLayer = document.getElementById('circleLayer');
 const pathLayer = document.getElementById('pathLayer');
 const fill = ['#123456','#561234','#125634','#C6832E','#3CC731', '#64748b', '#6b7280', '#71717a', '#737373', '#78716c', '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ef4444', '#ec4899', '#f43f5e',];
 const saveSvgButton = document.getElementById('saveSvgButton');
 const showSitesCheckbox = document.getElementById('showSitesCheckbox');
 const cellBorderNumber = document.getElementById('cellBorderNumber');
-const roundedCornerNumber = document.getElementById('roundedCornerNumber');
+const cellRoundedNumber = document.getElementById('cellRoundedNumber');
 const siteSizeNumber = document.getElementById('siteSizeNumber');
-
-let sitePoints = [];
+const siteNumberInput = document.getElementById('siteNumberInput');
+const cellOutlineCheckbox = document.getElementById('cellOutlineCheckbox');
+const backgroundRect = document.getElementById('backgroundRect');
+const backgroundColor = document.getElementById('backgroundColor');
+const svgWidthNumber = document.getElementById('svgWidthNumber'); 
+const svgHeightNumber = document.getElementById('svgHeightNumber'); 
+const localStorageName = 'voronoiData'
 let voronoiPolygons = [];
+const appData = {
+  siteNumber:50,
+  siteSize:3,
+  showSites:true,
+  cellBorder:3,
+  cellRounded:4,
+  cellOutline: true,
+  backgroundColor:'#333333',
+  svgWidth: 1200,
+  svgHeight: 600,
+  sitePoints:[],
+}
 
 // --- Event Listeners ---
 showSitesCheckbox.addEventListener('change', showSitesChange);
 saveSvgButton.addEventListener('click', saveSvg);
+siteNumberInput.addEventListener('input', updateAppData);
+svgWidthNumber.addEventListener('input', svgResize);
+svgHeightNumber.addEventListener('input', svgResize);
 
 // --- Helper Functions ---
+function svgResize(){
+  const height = Number(svgHeightNumber.value);
+  const width = Number(svgWidthNumber.value);
+  designSvg.setAttribute('height', height);
+  designSvg.setAttribute('width', width);
+  designSvg.setAttribute('viewBox', `0 0 ${width} ${height}` );
+  backgroundRect.setAttribute('height', height);
+  backgroundRect.setAttribute('width', width);
+  pathLayer.setAttribute('height', height);
+  pathLayer.setAttribute('width', width);
+  circleLayer.setAttribute('height', height);
+  circleLayer.setAttribute('width', width);  
+  appData.svgWidth = width;
+  appData.svgHeight = height;
+  renderView(true);
+}
+
+function changeBackground(color){
+  appData.backgroundColor = color;
+  backgroundRect.setAttribute('fill', color);
+  saveLocalStorage();
+}
+
+function updateAppData(generateSites=true){
+  appData.siteNumber = Number(siteNumberInput.value);
+  appData.siteSize = Number(siteSizeNumber.value);
+  appData.showSites = showSitesCheckbox.checked;
+  appData.cellBorder = Number(cellBorderNumber.value);
+  appData.cellRounded = Number(cellRoundedNumber.value);
+  appData.cellOutline = cellOutlineCheckbox.checked;
+  appData.backgroundColor = backgroundColor.value;
+  appData.svgWidth = Number(svgWidthNumber.value);
+  appData.svgHeight = Number(svgHeightNumber.value);
+  saveLocalStorage();
+  renderView(generateSites);
+}
+
+function onLoad(){
+  siteNumberInput.value = appData.siteNumber;
+  siteSizeNumber.value = appData.siteSize;
+  showSitesCheckbox.checked = appData.showSites;  
+  cellBorderNumber.value = appData.cellBorder;
+  cellRoundedNumber.value = appData.cellRounded;
+  cellOutlineCheckbox.checked = appData.cellOutline;
+  backgroundColor.value = appData.backgroundColor;
+  svgWidthNumber.value = appData.svgWidth;
+  svgHeightNumber.value = appData.svgHeight;
+  showSitesChange();
+  changeBackground(appData.backgroundColor);
+}
+
 function showSitesChange(){
   if(showSitesCheckbox.checked === true){
     circleLayer.classList.remove('hidden');
   }else{
     circleLayer.classList.add('hidden');
-  }  
+  }
+  appData.showSites = showSitesCheckbox.checked; 
+  saveLocalStorage();
 }
 
 function getFill(index){
@@ -132,8 +216,10 @@ function createPath(pathInfo, fill, fillOpacity, stroke, strokeWidth, id, layer,
   path.setAttributeNS(null, 'd', d);
   if(fill) path.setAttributeNS(null, 'fill', fill);
   if(fillOpacity) path.setAttributeNS(null, 'fill-opacity', fillOpacity);
-  if(stroke) path.setAttributeNS(null, 'stroke', stroke);
-  if(strokeWidth) path.setAttributeNS(null, 'stroke-width', strokeWidth);
+  if(cellOutlineCheckbox.checked){
+    if(stroke) path.setAttributeNS(null, 'stroke', stroke);
+    if(strokeWidth) path.setAttributeNS(null, 'stroke-width', strokeWidth);
+  }
   layer.appendChild(path);
 }
 
@@ -172,7 +258,6 @@ function curvePolygon(points, lengthToCurve = 6){
   if(threshold === 0) threshold = 2;
   if(threshold > 10) threshold = 10;
   
-  //const percentInverse = 1 - percent;
   let svgString = '';
   const pointsNew = [];
 
@@ -188,7 +273,6 @@ function curvePolygon(points, lengthToCurve = 6){
     }
   }
 
-
   for(let i=0; i<pointsNew.length; i++){
     const iNext = (i+1) % pointsNew.length;
     const iNextNext = (i+2) % pointsNew.length;
@@ -197,7 +281,6 @@ function curvePolygon(points, lengthToCurve = 6){
     const lineStart = findPointOnLineByDistance(pointsNew[i], corner, lengthToCurve, false)
     const lineEnd = findPointOnLineByDistance(pointsNew[i], corner, lengthToCurve, true)
     const curveEnd = findPointOnLineByDistance(corner, pointsNew[iNextNext], lengthToCurve, false)
-    
     const letter = (i===0)? 'M':'L'
     if(i===0) svgString += `M${lineStart.x} ${lineStart.y}`;
     svgString += ` L${lineEnd.x} ${lineEnd.y} Q${corner.x} ${corner.y} ${curveEnd.x} ${curveEnd.y}` 
@@ -340,26 +423,51 @@ function randomPoint(width, height){
 function relaxPoints(){
   const sitePointsNew = [];
   
-  voronoiPolygons.forEach(polygon => {
-    sitePointsNew.push(getPolygonCentroid(polygon));    
+  voronoiPolygons.forEach((polygon,index) => {
+    const centroid = getPolygonCentroid(polygon);
+    centroid.opacity = appData.sitePoints[index].opacity;
+    sitePointsNew.push(centroid);
   });
   
-  sitePoints = sitePointsNew;
+  appData.sitePoints = sitePointsNew;
   renderView(false)
 }
 
+function saveLocalStorage(){
+  const json = JSON.stringify(appData);
+  localStorage.setItem(localStorageName, json);  
+}
 
+function loadLocalStorage(){
+  const local = localStorage.getItem(localStorageName);
+  if (local) {
+    try {
+      const data = JSON.parse(local);
+      Object.assign(appData, data); // merge without losing reference
+      onLoad();
+      renderView(true);
+      svgResize();
+      console.log('Loading local data', appData);
+    } catch (e) {
+      saveLocalStorage();
+      renderView(true);
+      console.log('LocalStorage data unavailable');
+    }
+  }else{
+    saveLocalStorage();
+    renderView(true);
+  }
+}
 
 function renderView(recalculatePoints){
   circleLayer.innerHTML = '';
   pathLayer.innerHTML = '';
   voronoiPolygons = [];
-  const width = 1200;
-  const height = 600;
+  const width = appData.svgWidth;
+  const height = appData.svgHeight;
   const siteNumber = Number(siteNumberInput.value);
   const cellBorder = Number(cellBorderNumber.value);
-  const roundedCorner = Number(roundedCornerNumber.value);
-  
+  const cellRounded = Number(cellRoundedNumber.value);
 
   //Start with our rectangle boundry corners
   const corners = [
@@ -369,42 +477,42 @@ function renderView(recalculatePoints){
     {x:0, y:height, type:'corner'}, // bl
   ];
 
-  
   if(recalculatePoints){
-  sitePoints = [];  
+  appData.sitePoints = [];  
   // Add Random if at least 10 units apart
   for(let i=0; i<siteNumber; i++){
     let distance = width;
     const randPoint = randomPoint(width, height);
     // Check if the distance from all points is enough;
-    sitePoints.forEach(site =>{
+    appData.sitePoints.forEach(site =>{
       const distanceCheck = calculateDistance(site,randPoint,true)
       if(distance>distanceCheck) distance = distanceCheck;
     });
     if(distance>10){
-      sitePoints.push(randPoint);
+      randPoint.opacity = randomIntFromInterval(30, 90)/100;
+      appData.sitePoints.push(randPoint);
     }    
   }
   }
    
   // Make circles
-  sitePoints.forEach((site, index) =>{
+  appData.sitePoints.forEach((site, index) =>{
     createCircle(site, getFill(index+1), null, null, circleLayer);
   });
    
-  const sitePointsLen = sitePoints.length;
+  const sitePointsLen = appData.sitePoints.length;
 
   for (let x=0; x<sitePointsLen; x++){ 
     const siteIndex =  x ;
-    const currentSite = sitePoints[siteIndex];
+    const currentSite = appData.sitePoints[siteIndex];
 
     // Assign angle and distance from selected site (id);
-    sitePoints.forEach((site, index) =>{
+    appData.sitePoints.forEach((site, index) =>{
       site.distance = calculateDistance(currentSite, site, true);
     });
 
     // Clone and remove the current site at site index
-    const sitePointsClone =  [...sitePoints];
+    const sitePointsClone =  [...appData.sitePoints];
     sitePointsClone.splice(siteIndex, 1)
     sitePointsClone.sort((a, b) => {
       return parseFloat(a.distance) - parseFloat(b.distance); //by number
@@ -418,12 +526,9 @@ function renderView(recalculatePoints){
     }
     // Add to polygon list
     voronoiPolygons.push(reducedPoly1);
-    
-    const curvedPolygon = curvePolygon(reducedPoly1, roundedCorner);
-    createPath(curvedPolygon, getFill(x), 0.5, '#125634', 1, 'x', pathLayer, true);
-        
-    //const colour = '#000000' +  generateHexString(2);
-    //createPath(reducedPoly1, colour, colour, 1, 'x', pathLayer, true);
+    const curvedPolygon = curvePolygon(reducedPoly1, cellRounded);
+    createPath(curvedPolygon, getFill(x), currentSite.opacity, '#123456', 1, 'x', pathLayer, true);
+    //createPath(reducedPoly1, getFill(x), currentSite.opacity, '#123456', 1, 'x', pathLayer, true);
   } 
 }
 
@@ -448,7 +553,6 @@ function reducePolygon(polygon, bisectorLine, currentSite, width, height, segmen
   const polyTest1 = [];
   const polyTest2 = [];  
   
-  
   for(let i=0; i<newPolygon.length; i++){
     const point = newPolygon[i];
     if(point.type === 'intersect') intersectCount++;    
@@ -472,7 +576,7 @@ function reducePolygon(polygon, bisectorLine, currentSite, width, height, segmen
 }
 
 function init(){
-  renderView(true);
+  loadLocalStorage();
 }
 
 init();
